@@ -1,21 +1,13 @@
 import { Component } from '@angular/core';
-import { DatepickerComponent } from './shared/components/datepicker/datepicker.component';
-import { DatePipe } from '@angular/common';
-import { DatePickerOptionComponent } from './shared/components/date-picker-option/date-picker-option.component';
 import { DatePickerFinalVersionComponent } from './shared/components/date-picker-final-version/date-picker-final-version.component';
 import { ThemeService } from './shared/services/theme.service';
 import { FormsModule } from '@angular/forms';
-import { DatePickerFigmaComponent } from './shared/components/date-picker-figma/date-picker-figma.component';
 
 @Component({
   selector: 'app-root',
   imports: [
-    DatepickerComponent,
-    DatePipe,
-    DatePickerOptionComponent,
     DatePickerFinalVersionComponent,
     FormsModule,
-    DatePickerFigmaComponent
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',

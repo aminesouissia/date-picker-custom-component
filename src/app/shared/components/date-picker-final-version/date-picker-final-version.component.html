@@ -98,7 +98,13 @@
         <button class="nav-button" (click)="previousYear()">
           <i class="fas fa-chevron-left"></i>
         </button>
-        <span class="year-title">{{ currentDate.getFullYear() }}</span>
+        <span
+          class="year-title"
+          (click)="toggleYearSelection()"
+          [class.selected]="isYearSelected()"
+        >
+          {{ currentDate.getFullYear() }}
+        </span>
         <button class="nav-button" (click)="nextYear()">
           <i class="fas fa-chevron-right"></i>
         </button>
@@ -130,6 +136,7 @@
                 [class.selected]="isSelected(day)"
                 [class.disabled]="!isEnabled(day)"
                 [class.holiday]="isHoliday(day)"
+                [class.weekend]="isWeekend(day)"
                 (mousedown)="startDaySelection($event, day)"
                 (mousemove)="dragSelectDay($event, day)"
               >

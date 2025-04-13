@@ -207,6 +207,63 @@ export class DatePickerFinalVersionComponent {
     this.currentDate = new Date(this.currentDate.getFullYear() + 1, 0, 1);
   }
 
+  isWeekend(date: Date): boolean {
+    const day = date.getDay();
+    return day === 0 || day === 6; // 0 is Sunday, 6 is Saturday
+  }
+
+  toggleYearSelection() {
+    const year = this.currentDate.getFullYear();
+    const isYearSelected = this.isYearSelected();
+
+    if (isYearSelected) {
+      // Deselect all days in the year
+      this.selectedDays = this.selectedDays.filter(
+        (date) => date.getFullYear() !== year
+      );
+    } else {
+      // Select all enabled days in the year
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31);
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        if (this.isEnabled(currentDate)) {
+          this.selectedDays.push(new Date(currentDate));
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+  }
+
+  isYearSelected(): boolean {
+    const year = this.currentDate.getFullYear();
+    const allDaysInYear = this.getAllEnabledDaysInYear(year);
+    return allDaysInYear.every((date) =>
+      this.selectedDays.some(
+        (selectedDate) =>
+          selectedDate.getDate() === date.getDate() &&
+          selectedDate.getMonth() === date.getMonth() &&
+          selectedDate.getFullYear() === date.getFullYear()
+      )
+    );
+  }
+
+  private getAllEnabledDaysInYear(year: number): Date[] {
+    const days: Date[] = [];
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year, 11, 31);
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      if (this.isEnabled(currentDate)) {
+        days.push(new Date(currentDate));
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return days;
+  }
+
   isEnabled(date: Date): boolean {
     if (!this.enableHolidays && this.isHoliday(date)) return false;
     const dayIndex = (date.getDay() + 6) % 7;
