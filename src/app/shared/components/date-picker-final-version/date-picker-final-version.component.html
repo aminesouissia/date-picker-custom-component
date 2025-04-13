@@ -1,0 +1,144 @@
+<div class="datepicker-container">
+  <button class="datepicker-button" (click)="toggleCalendar()">
+    <i class="fas fa-calendar"></i>
+    Sélectionner des dates
+  </button>
+  <div class="info-message" *ngIf="showInfoMessage">
+    <div class="info-content">
+      <i class="fas fa-info-circle"></i>
+      <span
+        >Saisissez la fréquence, les horaires puis les périodes sur le
+        calendrier (à l'année, au mois, à la semaine ou au jour).</span
+      >
+    </div>
+    <button class="close-info-button" (click)="closeInfoMessage()">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div class="calendar-wrapper" *ngIf="isOpen">
+    <button class="close-button" (click)="closeCalendar()">
+      <i class="fas fa-times"></i>
+    </button>
+
+    <div class="sidebar">
+      <div class="weekday-settings">
+        <h3>Fréquence</h3>
+        <div class="weekday-circles">
+          <div class="weekday-row">
+            <div
+              *ngFor="let day of weekdays.slice(0, 4); let i = index"
+              class="weekday-circle"
+              [class.active]="enabledWeekdays[i]"
+              (click)="toggleWeekday(i)"
+            >
+              {{ day.slice(0, 2) }}
+            </div>
+          </div>
+          <div class="weekday-row">
+            <div
+              *ngFor="let day of weekdays.slice(4); let i = index"
+              class="weekday-circle"
+              [class.active]="enabledWeekdays[i + 4]"
+              (click)="toggleWeekday(i + 4)"
+            >
+              {{ day.slice(0, 2) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="holiday-settings">
+        <label class="toggle-switch">
+          <input
+            type="checkbox"
+            [(ngModel)]="enableHolidays"
+            (change)="updateHolidaySettings()"
+          />
+          <span class="slider round"></span>
+        </label>
+        Jours fériés exclus
+      </div>
+
+      <div class="time-settings">
+        <h3>Horaires</h3>
+        <div class="time-range-wrapper">
+          <b>De</b>
+          <div class="time-input-wrapper">
+            <input
+              type="time"
+              [(ngModel)]="startTime"
+              (change)="updateTimeRange()"
+            />
+          </div>
+          <span class="time-separator">à</span>
+          <div class="time-input-wrapper">
+            <input
+              type="time"
+              [(ngModel)]="endTime"
+              (change)="updateTimeRange()"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="button-group">
+        <button class="validate-button" (click)="validate()">
+          <i class="fas fa-check"></i>
+          Valider
+        </button>
+        <button class="reset-button" (click)="reset()">
+          <i class="fas fa-undo"></i>
+          Réinitialiser
+        </button>
+      </div>
+    </div>
+
+    <div class="calendar-content">
+      <div class="year-navigation">
+        <button class="nav-button" (click)="previousYear()">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <span class="year-title">{{ currentDate.getFullYear() }}</span>
+        <button class="nav-button" (click)="nextYear()">
+          <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+
+      <div class="months-grid">
+        <div
+          *ngFor="let month of months; let i = index"
+          class="month-container"
+        >
+          <div class="month-header">{{ month }}</div>
+          <div class="month-grid">
+            <div class="week-number-header">S</div>
+            <div class="day-header" *ngFor="let day of weekdays">
+              {{ day.slice(0, 2) }}
+            </div>
+
+            <ng-container *ngFor="let week of getWeeksInMonth(i)">
+              <div
+                class="week-number"
+                [class.selected]="isWeekSelected(week)"
+                (click)="toggleWeekSelection(week)"
+              >
+                {{ getWeekNumber(week[0]) }}
+              </div>
+              <div
+                *ngFor="let day of week"
+                class="day"
+                [class.selected]="isSelected(day)"
+                [class.disabled]="!isEnabled(day)"
+                [class.holiday]="isHoliday(day)"
+                (mousedown)="startDaySelection($event, day)"
+                (mousemove)="dragSelectDay($event, day)"
+              >
+                {{ day.getDate() }}
+              </div>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

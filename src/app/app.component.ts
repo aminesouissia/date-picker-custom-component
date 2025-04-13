@@ -1,12 +1,67 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { DatepickerComponent } from './shared/components/datepicker/datepicker.component';
+import { DatePipe } from '@angular/common';
+import { DatePickerOptionComponent } from './shared/components/date-picker-option/date-picker-option.component';
+import { DatePickerFinalVersionComponent } from './shared/components/date-picker-final-version/date-picker-final-version.component';
+import { ThemeService } from './shared/services/theme.service';
+import { FormsModule } from '@angular/forms';
+import { DatePickerFigmaComponent } from './shared/components/date-picker-figma/date-picker-figma.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  imports: [
+    DatepickerComponent,
+    DatePipe,
+    DatePickerOptionComponent,
+    DatePickerFinalVersionComponent,
+    FormsModule,
+    DatePickerFigmaComponent
+  ],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  styleUrl: './app.component.scss',
 })
 export class AppComponent {
-  title = 'angular-app-19';
+  selectedDate: Date | null = null;
+
+  onDateChange(date: Date) {
+    this.selectedDate = date;
+    console.log('Selected date:', date);
+  }
+
+  constructor(private themeService: ThemeService) {}
+
+  setDarkTheme() {
+    this.themeService.setTheme({
+      primary: '#bb86fc',
+      primaryLight: '#3700b3',
+      primaryDark: '#6200ee',
+      background: '#121212',
+      surface: '#1e1e1e',
+      border: '#333333',
+      text: '#ffffff',
+      textLight: '#bbbbbb',
+      disabled: '#222222',
+      hover: '#2c2c2c',
+    });
+  }
+
+  setLightTheme() {
+    this.themeService.resetTheme();
+  }
+
+  setCustomTheme() {
+    this.themeService.setTheme({
+      primary: '#2e7d32',
+      primaryLight: '#4caf50',
+      primaryDark: '#1b5e20',
+      secondary: '#757575',
+      background: '#ffffff',
+      surface: '#f5f5f5',
+      border: '#e0e0e0',
+      text: '#212121',
+      textLight: '#757575',
+      disabled: '#eeeeee',
+      hover: '#e8f5e9',
+    });
+  }
 }
