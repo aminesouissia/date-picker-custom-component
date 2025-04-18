@@ -3,7 +3,7 @@
     <i class="fas fa-calendar"></i>
     Sélectionner des dates
   </button>
-  <div class="info-message" *ngIf="showInfoMessage">
+  <div class="info-message" *ngIf="state.showInfoMessage">
     <div class="info-content">
       <i class="fas fa-info-circle"></i>
       <span
@@ -15,7 +15,7 @@
       <i class="fas fa-times"></i>
     </button>
   </div>
-  <div class="calendar-wrapper" *ngIf="isOpen">
+  <div class="calendar-wrapper" *ngIf="state.isOpen">
     <button class="close-button" (click)="closeCalendar()">
       <i class="fas fa-times"></i>
     </button>
@@ -28,7 +28,7 @@
             <div
               *ngFor="let day of weekdays.slice(0, 4); let i = index"
               class="weekday-circle"
-              [class.active]="enabledWeekdays[i]"
+              [class.active]="state.enabledWeekdays[i]"
               (click)="toggleWeekday(i)"
             >
               {{ day.slice(0, 2) }}
@@ -38,7 +38,7 @@
             <div
               *ngFor="let day of weekdays.slice(4); let i = index"
               class="weekday-circle"
-              [class.active]="enabledWeekdays[i + 4]"
+              [class.active]="state.enabledWeekdays[i + 4]"
               (click)="toggleWeekday(i + 4)"
             >
               {{ day.slice(0, 2) }}
@@ -51,12 +51,12 @@
         <label class="toggle-switch">
           <input
             type="checkbox"
-            [(ngModel)]="enableHolidays"
+            [(ngModel)]="state.enableHolidays"
             (change)="updateHolidaySettings()"
           />
           <span class="slider round"></span>
         </label>
-        Jours fériés exclus
+        Jours fériés
       </div>
 
       <div class="time-settings">
@@ -66,7 +66,7 @@
           <div class="time-input-wrapper">
             <input
               type="time"
-              [(ngModel)]="startTime"
+              [(ngModel)]="timeRange.startTime"
               (change)="updateTimeRange()"
             />
           </div>
@@ -74,7 +74,7 @@
           <div class="time-input-wrapper">
             <input
               type="time"
-              [(ngModel)]="endTime"
+              [(ngModel)]="timeRange.endTime"
               (change)="updateTimeRange()"
             />
           </div>
@@ -103,7 +103,7 @@
           (click)="toggleYearSelection()"
           [class.selected]="isYearSelected()"
         >
-          {{ currentDate.getFullYear() }}
+          {{ state.currentDate.getFullYear() }}
         </span>
         <button class="nav-button" (click)="nextYear()">
           <i class="fas fa-chevron-right"></i>

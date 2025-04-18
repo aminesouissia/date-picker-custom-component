@@ -1,7 +1,57 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import {
+  Component,
+  HostListener,
+  Input,
+  Output,
+  EventEmitter,
+  forwardRef,
+  OnInit,
+  OnDestroy,
+} from '@angular/core';
+import {
+  FormsModule,
+  ControlValueAccessor,
+  NG_VALUE_ACCESSOR,
+} from '@angular/forms';
 import { ThemeService } from '../../services/theme.service';
+import { HolidayService, Holiday } from '../../services/holiday.service';
+import { Subject, takeUntil } from 'rxjs';
+
+interface DateRange {
+  startTime: string;
+  endTime: string;
+}
+
+interface CalendarState {
+  isOpen: boolean;
+  showInfoMessage: boolean;
+  enabledWeekdays: boolean[];
+  enableHolidays: boolean;
+  selectedDays: Date[];
+  currentDate: Date;
+  isDragging: boolean;
+  selectionStart: Date | null;
+}
+
+export interface DatePickerConfig {
+  defaultTimeRange?: DateRange;
+  enableWeekends?: boolean;
+  enableHolidays?: boolean;
+  minDate?: Date;
+  maxDate?: Date;
+  holidayZone?: string;
+}
+
+enum WeekDay {
+  Monday = 1,
+  Tuesday = 2,
+  Wednesday = 3,
+  Thursday = 4,
+  Friday = 5,
+  Saturday = 6,
+  Sunday = 0,
+}
 
 @Component({
   selector: 'app-date-picker-final-version',
@@ -9,11 +59,27 @@ import { ThemeService } from '../../services/theme.service';
   imports: [CommonModule, FormsModule],
   templateUrl: './date-picker-final-version.component.html',
   styleUrl: './date-picker-final-version.component.scss',
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      useExisting: forwardRef(() => DatePickerFinalVersionComponent),
+      multi: true,
+    },
+  ],
 })
-export class DatePickerFinalVersionComponent {
-  isOpen = false;
-  showInfoMessage = false;
-  weekdays = [
+export class DatePickerFinalVersionComponent
+  implements ControlValueAccessor, OnInit, OnDestroy
+{
+  @Input() config: DatePickerConfig = {};
+  @Output() selectedDatesChange = new EventEmitter<Date[]>();
+  @Output() timeRangeChange = new EventEmitter<DateRange>();
+
+  private destroy$ = new Subject<void>();
+  private holidays: Holiday[] = [];
+  private onChange: (value: any) => void = () => {};
+  private onTouched: () => void = () => {};
+
+  readonly weekdays = [
     'Lundi',
     'Mardi',
     'Mercredi',
@@ -22,7 +88,8 @@ export class DatePickerFinalVersionComponent {
     'Samedi',
     'Dimanche',
   ];
-  months = [
+
+  readonly months = [
     'Janvier',
     'Février',
     'Mars',
@@ -36,102 +103,319 @@ export class DatePickerFinalVersionComponent {
     'Novembre',
     'Décembre',
   ];
-  enabledWeekdays = [true, true, true, true, true, true, true];
-  currentDate = new Date();
-  selectedDays: Date[] = [];
-  isDragging = false;
-  selectionStart: Date | null = null;
-  enableHolidays = false;
-  startTime = '09:00';
-  endTime = '17:00';
-  holidays: Date[] = [
-    // 2024
-    new Date(2024, 0, 1), // Jour de l'An
-    new Date(2024, 3, 1), // Lundi de Pâques
-    new Date(2024, 4, 1), // Fête du Travail
-    new Date(2024, 4, 8), // Victoire 1945
-    new Date(2024, 4, 9), // Ascension
-    new Date(2024, 4, 20), // Lundi de Pentecôte
-    new Date(2024, 6, 14), // Fête Nationale
-    new Date(2024, 7, 15), // Assomption
-    new Date(2024, 10, 1), // Toussaint
-    new Date(2024, 10, 11), // Armistice 1918
-    new Date(2024, 11, 25), // Noël
-    // 2025
-    new Date(2025, 0, 1), // Jour de l'An
-    new Date(2025, 3, 21), // Lundi de Pâques
-    new Date(2025, 4, 1), // Fête du Travail
-    new Date(2025, 4, 8), // Victoire 1945
-    new Date(2025, 4, 29), // Ascension
-    new Date(2025, 5, 9), // Lundi de Pentecôte
-    new Date(2025, 6, 14), // Fête Nationale
-    new Date(2025, 7, 15), // Assomption
-    new Date(2025, 10, 1), // Toussaint
-    new Date(2025, 10, 11), // Armistice 1918
-    new Date(2025, 11, 25), // Noël
-  ];
 
-  constructor(private themeService: ThemeService) {}
+  state: CalendarState = {
+    isOpen: false,
+    showInfoMessage: false,
+    enabledWeekdays: [true, true, true, true, true, true, true],
+    enableHolidays: false,
+    selectedDays: [],
+    currentDate: new Date(),
+    isDragging: false,
+    selectionStart: null,
+  };
+
+  timeRange: DateRange = {
+    startTime: '09:00',
+    endTime: '17:00',
+  };
+
+  constructor(
+    private themeService: ThemeService,
+    private holidayService: HolidayService
+  ) {}
 
   ngOnInit() {
     this.themeService.resetTheme();
+    this.initializeConfig();
+    this.loadHolidays();
   }
 
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // ControlValueAccessor implementation
+  writeValue(value: Date[]): void {
+    if (Array.isArray(value)) {
+      this.state.selectedDays = value.map((date) => new Date(date));
+      this.selectedDatesChange.emit(this.state.selectedDays);
+    }
+  }
+
+  registerOnChange(fn: any): void {
+    this.onChange = fn;
+  }
+
+  registerOnTouched(fn: any): void {
+    this.onTouched = fn;
+  }
+
+  setDisabledState(isDisabled: boolean): void {
+    // Implement if needed
+  }
+
+  private initializeConfig(): void {
+    if (this.config.defaultTimeRange) {
+      this.timeRange = { ...this.config.defaultTimeRange };
+    }
+
+    if (typeof this.config.enableWeekends === 'boolean') {
+      this.state.enabledWeekdays[5] = this.config.enableWeekends; // Saturday
+      this.state.enabledWeekdays[6] = this.config.enableWeekends; // Sunday
+    }
+
+    if (typeof this.config.enableHolidays === 'boolean') {
+      this.state.enableHolidays = this.config.enableHolidays;
+    }
+  }
+
+  private loadHolidays(): void {
+    const currentYear = this.state.currentDate.getFullYear();
+    this.holidayService
+      .getHolidays(currentYear, this.config.holidayZone)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((holidays) => {
+        this.holidays = holidays;
+      });
+  }
+
+  // Event Handlers
   @HostListener('window:mouseup')
   onWindowMouseUp() {
     this.endDaySelection();
   }
 
-  toggleCalendar() {
-    if (this.isOpen) {
+  // Calendar UI Actions
+  toggleCalendar(): void {
+    if (this.state.isOpen) {
       this.reset();
     }
-    this.isOpen = !this.isOpen;
-    this.showInfoMessage = !this.showInfoMessage;
+    this.state.isOpen = !this.state.isOpen;
+    this.state.showInfoMessage = !this.state.showInfoMessage;
   }
 
-  closeCalendar() {
+  closeCalendar(): void {
     this.reset();
-    this.isOpen = false;
-    this.showInfoMessage = false;
+    this.state.isOpen = false;
+    this.state.showInfoMessage = false;
   }
 
-  toggleWeekday(index: number) {
-    this.enabledWeekdays[index] = !this.enabledWeekdays[index];
-    this.selectedDays = this.selectedDays.filter((day) => this.isEnabled(day));
+  closeInfoMessage(): void {
+    this.state.showInfoMessage = false;
   }
 
-  updateHolidaySettings() {
-    if (!this.enableHolidays) {
-      this.selectedDays = this.selectedDays.filter(
+  // Navigation
+  previousYear(): void {
+    this.state.currentDate = new Date(
+      this.state.currentDate.getFullYear() - 1,
+      0,
+      1
+    );
+    this.loadHolidays();
+  }
+
+  nextYear(): void {
+    this.state.currentDate = new Date(
+      this.state.currentDate.getFullYear() + 1,
+      0,
+      1
+    );
+    this.loadHolidays();
+  }
+
+  // Settings
+  toggleWeekday(index: number): void {
+    this.state.enabledWeekdays[index] = !this.state.enabledWeekdays[index];
+    this.state.selectedDays = this.state.selectedDays.filter((day) =>
+      this.isEnabled(day)
+    );
+    this.emitChanges();
+  }
+
+  updateHolidaySettings(): void {
+    if (!this.state.enableHolidays) {
+      this.state.selectedDays = this.state.selectedDays.filter(
         (day) => !this.isHoliday(day)
       );
+      this.emitChanges();
     }
   }
 
-  updateTimeRange() {
-    console.log(
-      `Plage horaire mise à jour : ${this.startTime} - ${this.endTime}`
-    );
+  updateTimeRange(): void {
+    this.timeRangeChange.emit(this.timeRange);
   }
 
-  reset() {
-    this.selectedDays = [];
-    this.startTime = '09:00';
-    this.endTime = '17:00';
-    this.enableHolidays = false;
-    this.enabledWeekdays = [true, true, true, true, true, true, true];
+  reset(): void {
+    this.state.selectedDays = [];
+    this.timeRange = {
+      startTime: '09:00',
+      endTime: '17:00',
+    };
+    this.state.enableHolidays = false;
+    this.state.enabledWeekdays = [true, true, true, true, true, true, true];
+    this.initializeConfig();
+    this.emitChanges();
+  }
+
+  // Helper Methods
+  private emitChanges(): void {
+    this.onChange(this.state.selectedDays);
+    this.onTouched();
+    this.selectedDatesChange.emit(this.state.selectedDays);
   }
 
   isHoliday(date: Date): boolean {
     return this.holidays.some(
       (holiday) =>
-        holiday.getDate() === date.getDate() &&
-        holiday.getMonth() === date.getMonth() &&
-        holiday.getFullYear() === date.getFullYear()
+        holiday.date.getDate() === date.getDate() &&
+        holiday.date.getMonth() === date.getMonth() &&
+        holiday.date.getFullYear() === date.getFullYear()
     );
   }
 
+  // Date Selection Methods
+  startDaySelection(event: MouseEvent, date: Date): void {
+    if (!this.isEnabled(date)) return;
+    this.state.isDragging = true;
+    this.state.selectionStart = date;
+    this.selectDay(date);
+  }
+
+  dragSelectDay(event: MouseEvent, date: Date): void {
+    if (!this.state.isDragging || !this.state.selectionStart) return;
+    this.selectDaysInRange(this.state.selectionStart, date);
+  }
+
+  endDaySelection(): void {
+    this.state.isDragging = false;
+    this.state.selectionStart = null;
+  }
+
+  selectDaysInRange(start: Date, end: Date): void {
+    const startTime = start.getTime();
+    const endTime = end.getTime();
+    const minTime = Math.min(startTime, endTime);
+    const maxTime = Math.max(startTime, endTime);
+
+    this.state.selectedDays = this.state.selectedDays.filter(
+      (date) => date.getTime() < minTime || date.getTime() > maxTime
+    );
+
+    const currentDate = new Date(minTime);
+    while (currentDate.getTime() <= maxTime) {
+      if (this.isEnabled(currentDate)) {
+        this.state.selectedDays.push(new Date(currentDate));
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+
+  selectDay(date: Date): void {
+    if (!this.isEnabled(date)) return;
+
+    const index = this.state.selectedDays.findIndex(
+      (selectedDate) =>
+        selectedDate.getDate() === date.getDate() &&
+        selectedDate.getMonth() === date.getMonth() &&
+        selectedDate.getFullYear() === date.getFullYear()
+    );
+
+    if (index === -1) {
+      this.state.selectedDays.push(new Date(date));
+    } else {
+      this.state.selectedDays.splice(index, 1);
+    }
+  }
+
+  // Year Selection Methods
+  toggleYearSelection(): void {
+    const year = this.state.currentDate.getFullYear();
+    const isYearSelected = this.isYearSelected();
+
+    if (isYearSelected) {
+      this.state.selectedDays = this.state.selectedDays.filter(
+        (date) => date.getFullYear() !== year
+      );
+    } else {
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31);
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        if (this.isEnabled(currentDate)) {
+          this.state.selectedDays.push(new Date(currentDate));
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+  }
+
+  // Week Selection Methods
+  toggleWeekSelection(week: Date[]): void {
+    const isWeekSelected = this.isWeekSelected(week);
+
+    if (isWeekSelected) {
+      week.forEach((day) => {
+        const index = this.state.selectedDays.findIndex(
+          (selectedDate) =>
+            selectedDate.getDate() === day.getDate() &&
+            selectedDate.getMonth() === day.getMonth() &&
+            selectedDate.getFullYear() === day.getFullYear()
+        );
+        if (index !== -1) {
+          this.state.selectedDays.splice(index, 1);
+        }
+      });
+    } else {
+      week.forEach((day) => {
+        if (this.isEnabled(day) && !this.isSelected(day)) {
+          this.state.selectedDays.push(new Date(day));
+        }
+      });
+    }
+  }
+
+  // Helper Methods
+  isWeekend(date: Date): boolean {
+    const day = date.getDay();
+    return day === WeekDay.Sunday || day === WeekDay.Saturday;
+  }
+
+  isEnabled(date: Date): boolean {
+    if (!this.state.enableHolidays && this.isHoliday(date)) return false;
+    const dayIndex = (date.getDay() + 6) % 7;
+    return this.state.enabledWeekdays[dayIndex];
+  }
+
+  isSelected(date: Date): boolean {
+    return this.state.selectedDays.some(
+      (selectedDate) =>
+        selectedDate.getDate() === date.getDate() &&
+        selectedDate.getMonth() === date.getMonth() &&
+        selectedDate.getFullYear() === date.getFullYear()
+    );
+  }
+
+  isWeekSelected(week: Date[]): boolean {
+    return week.every((day) => this.isSelected(day) || !this.isEnabled(day));
+  }
+
+  isYearSelected(): boolean {
+    const year = this.state.currentDate.getFullYear();
+    const allDaysInYear = this.getAllEnabledDaysInYear(year);
+    return allDaysInYear.every((date) =>
+      this.state.selectedDays.some(
+        (selectedDate) =>
+          selectedDate.getDate() === date.getDate() &&
+          selectedDate.getMonth() === date.getMonth() &&
+          selectedDate.getFullYear() === date.getFullYear()
+      )
+    );
+  }
+
+  // Calendar Grid Methods
   getWeeksInMonth(monthIndex: number): Date[][] {
     const days = this.getDaysInMonth(monthIndex);
     const weeks: Date[][] = [];
@@ -149,22 +433,19 @@ export class DatePickerFinalVersionComponent {
   }
 
   getDaysInMonth(monthIndex: number): Date[] {
-    const year = this.currentDate.getFullYear();
+    const year = this.state.currentDate.getFullYear();
     const firstDay = new Date(year, monthIndex, 1);
     const lastDay = new Date(year, monthIndex + 1, 0);
     const days: Date[] = [];
 
-    // Get the first day of the week (Monday = 1, Sunday = 0)
     let firstDayOfWeek = firstDay.getDay() || 7;
     firstDayOfWeek = firstDayOfWeek === 1 ? 8 : firstDayOfWeek;
 
-    // Add days from previous month
     for (let i = 1; i < firstDayOfWeek; i++) {
       const prevDate = new Date(year, monthIndex, 1 - i);
       days.unshift(prevDate);
     }
 
-    // Add days of current month
     for (
       let date = new Date(firstDay);
       date <= lastDay;
@@ -173,7 +454,6 @@ export class DatePickerFinalVersionComponent {
       days.push(new Date(date));
     }
 
-    // Add days from next month to complete the grid
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       const nextDate = new Date(year, monthIndex + 1, i);
@@ -199,56 +479,6 @@ export class DatePickerFinalVersionComponent {
     );
   }
 
-  previousYear() {
-    this.currentDate = new Date(this.currentDate.getFullYear() - 1, 0, 1);
-  }
-
-  nextYear() {
-    this.currentDate = new Date(this.currentDate.getFullYear() + 1, 0, 1);
-  }
-
-  isWeekend(date: Date): boolean {
-    const day = date.getDay();
-    return day === 0 || day === 6; // 0 is Sunday, 6 is Saturday
-  }
-
-  toggleYearSelection() {
-    const year = this.currentDate.getFullYear();
-    const isYearSelected = this.isYearSelected();
-
-    if (isYearSelected) {
-      // Deselect all days in the year
-      this.selectedDays = this.selectedDays.filter(
-        (date) => date.getFullYear() !== year
-      );
-    } else {
-      // Select all enabled days in the year
-      const startDate = new Date(year, 0, 1);
-      const endDate = new Date(year, 11, 31);
-      const currentDate = new Date(startDate);
-
-      while (currentDate <= endDate) {
-        if (this.isEnabled(currentDate)) {
-          this.selectedDays.push(new Date(currentDate));
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    }
-  }
-
-  isYearSelected(): boolean {
-    const year = this.currentDate.getFullYear();
-    const allDaysInYear = this.getAllEnabledDaysInYear(year);
-    return allDaysInYear.every((date) =>
-      this.selectedDays.some(
-        (selectedDate) =>
-          selectedDate.getDate() === date.getDate() &&
-          selectedDate.getMonth() === date.getMonth() &&
-          selectedDate.getFullYear() === date.getFullYear()
-      )
-    );
-  }
-
   private getAllEnabledDaysInYear(year: number): Date[] {
     const days: Date[] = [];
     const startDate = new Date(year, 0, 1);
@@ -264,112 +494,15 @@ export class DatePickerFinalVersionComponent {
     return days;
   }
 
-  isEnabled(date: Date): boolean {
-    if (!this.enableHolidays && this.isHoliday(date)) return false;
-    const dayIndex = (date.getDay() + 6) % 7;
-    return this.enabledWeekdays[dayIndex];
-  }
-
-  isSelected(date: Date): boolean {
-    return this.selectedDays.some(
-      (selectedDate) =>
-        selectedDate.getDate() === date.getDate() &&
-        selectedDate.getMonth() === date.getMonth() &&
-        selectedDate.getFullYear() === date.getFullYear()
-    );
-  }
-
-  isWeekSelected(week: Date[]): boolean {
-    return week.every((day) => this.isSelected(day) || !this.isEnabled(day));
-  }
-
-  toggleWeekSelection(week: Date[]) {
-    const isWeekSelected = this.isWeekSelected(week);
-
-    if (isWeekSelected) {
-      // Désélectionner la semaine
-      week.forEach((day) => {
-        const index = this.selectedDays.findIndex(
-          (selectedDate) =>
-            selectedDate.getDate() === day.getDate() &&
-            selectedDate.getMonth() === day.getMonth() &&
-            selectedDate.getFullYear() === day.getFullYear()
-        );
-        if (index !== -1) {
-          this.selectedDays.splice(index, 1);
-        }
-      });
-    } else {
-      // Sélectionner la semaine
-      week.forEach((day) => {
-        if (this.isEnabled(day) && !this.isSelected(day)) {
-          this.selectedDays.push(new Date(day));
-        }
-      });
-    }
-  }
-
-  startDaySelection(event: MouseEvent, date: Date) {
-    if (!this.isEnabled(date)) return;
-    this.isDragging = true;
-    this.selectionStart = date;
-    this.selectDay(date);
-  }
-
-  dragSelectDay(event: MouseEvent, date: Date) {
-    if (!this.isDragging || !this.selectionStart) return;
-    this.selectDaysInRange(this.selectionStart, date);
-  }
-
-  endDaySelection() {
-    this.isDragging = false;
-    this.selectionStart = null;
-  }
-
-  selectDaysInRange(start: Date, end: Date) {
-    const startTime = start.getTime();
-    const endTime = end.getTime();
-    const minTime = Math.min(startTime, endTime);
-    const maxTime = Math.max(startTime, endTime);
-
-    this.selectedDays = this.selectedDays.filter(
-      (date) => date.getTime() < minTime || date.getTime() > maxTime
-    );
-
-    const currentDate = new Date(minTime);
-    while (currentDate.getTime() <= maxTime) {
-      if (this.isEnabled(currentDate)) {
-        this.selectedDays.push(new Date(currentDate));
-      }
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-  }
-
-  selectDay(date: Date) {
-    if (!this.isEnabled(date)) return;
-
-    const index = this.selectedDays.findIndex(
-      (selectedDate) =>
-        selectedDate.getDate() === date.getDate() &&
-        selectedDate.getMonth() === date.getMonth() &&
-        selectedDate.getFullYear() === date.getFullYear()
-    );
-
-    if (index === -1) {
-      this.selectedDays.push(new Date(date));
-    } else {
-      this.selectedDays.splice(index, 1);
-    }
-  }
-
-  validate() {
-    console.log('Dates sélectionnées:', this.selectedDays);
-    console.log('Plage horaire:', { début: this.startTime, fin: this.endTime });
-    this.isOpen = false;
-    this.showInfoMessage = false;
-  }
-
-  closeInfoMessage() {
-    this.showInfoMessage = false;
+  // Final Actions
+  validate(): void {
+    this.emitChanges();
+    this.state.isOpen = false;
+    this.state.showInfoMessage = false;
+     console.log('Dates sélectionnées:', this.state.selectedDays);
+     console.log('Plage horaire:', {
+       début: this.timeRange.startTime,
+       fin: this.timeRange.endTime,
+     });
   }
 }
