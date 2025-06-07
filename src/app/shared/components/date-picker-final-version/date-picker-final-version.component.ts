@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import {
   Component,
   HostListener,
@@ -56,7 +56,7 @@ enum WeekDay {
 @Component({
   selector: 'app-date-picker-final-version',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   templateUrl: './date-picker-final-version.component.html',
   styleUrl: './date-picker-final-version.component.scss',
   providers: [
